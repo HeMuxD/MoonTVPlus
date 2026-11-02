@@ -57,9 +57,10 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
           git fetch --no-tags upstream "${UPSTREAM_BRANCH}"
-          git merge -m "chore: sync upstream $(date -u +%Y-%m-%dT%H:%M:%SZ)" "upstream/${UPSTREAM_BRANCH}"
+          # 3) 合并并推回；commit message 带 [skip ci]，避免上游那两个 push 触发的 Docker 构建被连带跑起来
+          git merge -m "chore: sync upstream $(date -u +%Y-%m-%dT%H:%M:%SZ) [skip ci]" "upstream/${UPSTREAM_BRANCH}"
 
-          # 3) 推回分支（必须用 PAT，GITHUB_TOKEN 无 workflows 权限，上游改动 workflow 时会被拒）
+          # 4) 推回分支（必须用 PAT，GITHUB_TOKEN 无 workflows 权限，上游改动 workflow 时会被拒）
           git push origin "${UPSTREAM_BRANCH}"
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
