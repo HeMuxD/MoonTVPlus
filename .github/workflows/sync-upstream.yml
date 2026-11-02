@@ -1,0 +1,78 @@
+# 上游 mtvpls/MoonTVPlus 有新提交时 -> 自动合并到本 fork -> 自动触发 Deploy to EdgeOne
+# 放置位置：HeMuxD/MoonTVPlus 仓库 .github/workflows/sync-upstream.yml
+# 依赖 secret：SYNC_PAT（fine-grained PAT，权限见 README 说明）
+
+name: Sync Upstream and Deploy
+
+on:
+  schedule:
+    # 每 30 分钟检查一次上游（UTC 时间）。public 仓库 Actions 不计费，可自行调密。
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+# 本 workflow 自身只用只读权限；推送与触发 action 全部走 SYNC_PAT
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: mtvpls/MoonTVPlus
+  UPSTREAM_BRANCH: main
+  # ↓↓↓ 改成你自己的 EdgeOne Pages 项目名 / 区域（overseas 或 global）
+  EDGEONE_PROJECT: moontvplus
+  EDGEONE_AREA: overseas
+
+jobs:
+  sync-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync upstream into fork
+        id: sync
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
+        run: |
+          set -euo pipefail
+
+          # 1) 用 compare API 判断上游是否领先（behind_by > 0 才有新提交）
+          behind=$(curl -fsSL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${UPSTREAM_REPO}/compare/${UPSTREAM_BRANCH}...${GITHUB_REPOSITORY}:${UPSTREAM_BRANCH}" \
+            | jq -r '.behind_by // 0')
+
+          if [ "$behind" = "0" ]; then
+            echo "上游无新提交，跳过。"
+            exit 0
+          fi
+          echo "上游领先 ${behind} 个提交，开始同步。"
+
+          # 2) 合并上游（用 merge 而不是 fast-forward，保留本 fork 的自定义文件）
+          git clone --filter=blob:none \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" repo
+          cd repo
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
+          git fetch --no-tags upstream "${UPSTREAM_BRANCH}"
+          git merge -m "chore: sync upstream $(date -u +%Y-%m-%dT%H:%M:%SZ)" "upstream/${UPSTREAM_BRANCH}"
+
+          # 3) 推回分支（必须用 PAT，GITHUB_TOKEN 无 workflows 权限，上游改动 workflow 时会被拒）
+          git push origin "${UPSTREAM_BRANCH}"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger Deploy to EdgeOne
+        if: steps.sync.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
+        run: |
+          set -euo pipefail
+          gh workflow run edgeone-deploy.yml \
+            --repo "${GITHUB_REPOSITORY}" \
+            --ref "${UPSTREAM_BRANCH}" \
+            -f project_name="${EDGEONE_PROJECT}" \
+            -f area="${EDGEONE_AREA}" \
+            -f sync_environment=true
+          echo "已触发 Deploy to EdgeOne，去 Actions 页查看进度。"
