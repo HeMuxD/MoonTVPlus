@@ -40,7 +40,7 @@ jobs:
           behind=$(curl -fsSL \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${UPSTREAM_REPO}/compare/${UPSTREAM_BRANCH}...${GITHUB_REPOSITORY}:${UPSTREAM_BRANCH}" \
+            "https://api.github.com/repos/${UPSTREAM_REPO}/compare/${UPSTREAM_BRANCH}...${GITHUB_REPOSITORY_OWNER}:${UPSTREAM_BRANCH}" \
             | jq -r '.behind_by // 0')
 
           if [ "$behind" = "0" ]; then
