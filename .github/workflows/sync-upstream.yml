@@ -6,8 +6,8 @@ name: Sync Upstream and Deploy
 
 on:
   schedule:
-    # 每 30 分钟检查一次上游（UTC 时间）。public 仓库 Actions 不计费，可自行调密。
-    - cron: '*/30 * * * *'
+    # 每天检查一次上游。cron 为 UTC 时间：19:17 UTC = 北京时间 03:17（错开整点，减少排队延迟）
+    - cron: '17 19 * * *'
   workflow_dispatch:
 
 # 本 workflow 自身只用只读权限；推送与触发 action 全部走 SYNC_PAT
